@@ -1,0 +1,107 @@
+#!/bin/sh
+# manyless
+
+VERSION='1.0.0'
+
+manyless_main() {
+	trap _exit INT TERM
+
+	E_ARGS=16
+
+	SCRIPT_INV="$( basename "$0" )"
+	SCRIPT_PATH="$( readlink -f "$0" )"
+	SCRIPT_NAME="$( basename "$SCRIPT_PATH" )"
+
+	while getopts hv opt
+	do
+		case $opt in
+			h) cmd=help ;;
+			v) cmd=version ;;
+			*) _invalid_opt ;;
+		esac
+	done
+
+	shift "$(( OPTIND - 1 ))"
+
+	[ -z "$cmd" ] && cmd="process"
+
+	case "$cmd" in
+		help|process|version) "manyless_$cmd" "$@" ;;
+		*) _invalid_cmd ;;
+	esac
+
+	_exit
+}
+
+manyless_help() {
+cat <<USAGE
+$SCRIPT_NAME $VERSION
+
+USAGE: $SCRIPT_INV [<options>] <paths>
+
+Follow many files through less at once, prefixing every line with file path.
+
+OPTIONS:
+
+	-h        Show this help screen.
+	-v        Show script name and version number.
+
+USAGE
+}
+
+manyless_process() {
+	[ $# -lt 1 ] && _fatal $E_ARGS "Specify at least one file path."
+
+	filepath=
+
+	tail -f "$@" | while read -r line
+	do
+		if echo "$line" | grep -E '^==> ' 2>&1 > /dev/null
+		then
+			filepath="$( echo "$line" | sed -E 's/(^==> | <==$)//g' )"
+			continue
+		fi
+
+		echo "$filepath: $line"
+	done
+}
+
+manyless_version() {
+	_echo "$SCRIPT_NAME $VERSION"
+}
+
+_echo() {
+	echo "$@"
+}
+
+_error() {
+	_echo "$@" >&2
+}
+
+_exit() {
+	exit_code=$?
+	exit $exit_code
+}
+
+_fatal() {
+	exit_code="$1"
+	shift
+	_error "$@"
+	exit "$exit_code"
+}
+
+_invalid_cmd() {
+	_error "Invalid command: $cmd"
+	_echo
+	manyless_help
+	exit $E_ARGS
+}
+
+_invalid_opt() {
+	_error "Invalid option: $opt"
+	_echo
+	manyless_help
+	exit $E_ARGS
+}
+
+manyless_main "$@"
